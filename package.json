@@ -14,6 +14,7 @@
     "@sinclair/typebox": "^0.34.48",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "convex": "^1.32.0",
     "elysia": "^1.4.25",
     "next": "16.1.6",
     "openapi-types": "^12.1.3",
