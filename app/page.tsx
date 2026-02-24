@@ -1,9 +1,9 @@
-import { ChatInterface } from '@/components/chat-interface';
+import { AutoRoute } from "@/components/autoroute";
 
 export default function Page() {
   return (
     <div className="h-screen w-screen overflow-hidden">
-      <ChatInterface />
+      <AutoRoute />
     </div>
   );
 }

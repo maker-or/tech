@@ -11,6 +11,7 @@
 import type * as agent from "../agent.js";
 import type * as chat from "../chat.js";
 import type * as crash from "../crash.js";
+import type * as placeBoundary from "../placeBoundary.js";
 
 import type {
   ApiFromModules,
@@ -22,6 +23,7 @@ declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   chat: typeof chat;
   crash: typeof crash;
+  placeBoundary: typeof placeBoundary;
 }>;
 
 /**
