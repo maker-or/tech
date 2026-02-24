@@ -29,7 +29,6 @@ import {
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 
 // shadcn ui
 import { Badge } from "@/components/ui/badge";
@@ -43,21 +42,14 @@ import {
 } from "@/components/ui/tooltip";
 import { api } from "../convex/_generated/api";
 
-const SUGGESTIONS = [
-  "Show all users created this week",
-  "Count records grouped by status",
-  "Find top 10 most active accounts",
-  "List tables with their row counts",
-];
-
 export function ChatInterface() {
   const [threadId, setThreadId] = useState<string | null>(null);
 
-  const createThread = useMutation((api as any).chat.createChatThread);
+  const createThread = useMutation(api.chat.createChatThread);
   const sendMessage = useMutation(
     (api as any).chat.sendMessage,
   ).withOptimisticUpdate(
-    optimisticallySendMessage((api as any).chat.listThreadMessages),
+    optimisticallySendMessage(api.chat.listThreadMessages),
   );
 
   const messages = useUIMessages(
