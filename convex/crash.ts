@@ -241,3 +241,24 @@ export const getHotspotLocations = query({
     };
   },
 });
+
+export const listCrashesForGeoFilter = query({
+  args: {
+    startTime: v.optional(v.string()),
+    endTime: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("crash").collect();
+    const limit = Math.max(1, Math.min(args.limit ?? 500, 5000));
+
+    return rows
+      .filter((row) => inTimeRange(row.timeStamp, args.startTime, args.endTime))
+      .slice(0, limit)
+      .map((row) => ({
+        timeStamp: row.timeStamp,
+        vehicleId: row.vehicleId,
+        location: row.location,
+      }));
+  },
+});
