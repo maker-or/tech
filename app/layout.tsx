@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
+import ConvexClientProvider from "./ConvexClientProvider"
 
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -27,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${jetbrainsMono.variable} dark`}>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
+        <ConvexClientProvider>{children}</ConvexClientProvider>
       </body>
     </html>
   )

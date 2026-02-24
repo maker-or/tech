@@ -11,9 +11,6 @@
 import type * as agent from "../agent.js";
 import type * as chat from "../chat.js";
 import type * as crash from "../crash.js";
-import type * as crashQueries from "../crashQueries.js";
-import type * as threads from "../threads.js";
-import type * as tools from "../tools.js";
 
 import type {
   ApiFromModules,
@@ -25,9 +22,6 @@ declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   chat: typeof chat;
   crash: typeof crash;
-  crashQueries: typeof crashQueries;
-  threads: typeof threads;
-  tools: typeof tools;
 }>;
 
 /**

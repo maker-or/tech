@@ -1,48 +1,83 @@
 'use client';
 
-import { useQuery, useMutation, useAction } from 'convex/react';
+import {
+  optimisticallySendMessage,
+  useUIMessages,
+} from '@convex-dev/agent/react';
+import {
+  Database,
+  PaperPlaneRight,
+  Terminal,
+  CircleNotch,
+  Robot,
+  User,
+  Sparkle,
+  ArrowsClockwise,
+} from '@phosphor-icons/react';
+import { useMutation } from 'convex/react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../convex/_generated/api';
-import { useState, useRef, useEffect } from 'react';
-import { Id } from '../convex/_generated/dataModel';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Card } from './ui/card';
-import { PaperPlaneRight, Database } from '@phosphor-icons/react';
-import ReactMarkdown from 'react-markdown';
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from './ui/card';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupButton,
+} from './ui/input-group';
+import { ScrollArea } from './ui/scroll-area';
+import { Badge } from './ui/badge';
+import { Separator } from './ui/separator';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from './ui/tooltip';
 
 export function ChatInterface() {
-  // Use a hardcoded generic userId for this minimal example
-  const userId = 'anonymous_user_1';
+  const [threadId, setThreadId] = useState<string | null>(null);
 
-  // Create or load a thread
-  const [threadId, setThreadId] = useState<Id<'threads'> | null>(null);
-
-  const createThread = useMutation(api.threads.createThread);
-  const messages = useQuery(
-    api.threads.getMessages,
-    threadId ? { threadId } : 'skip',
+  const createThread = useMutation((api as any).chat.createChatThread);
+  const sendMessage = useMutation((api as any).chat.sendMessage).withOptimisticUpdate(
+    optimisticallySendMessage((api as any).chat.listThreadMessages),
   );
-  const sendMessage = useAction(api.chat.sendMessage);
+
+  const messages = useUIMessages(
+    (api as any).chat.listThreadMessages,
+    threadId ? { threadId } : 'skip',
+    { initialNumItems: 30 },
+  );
+  const uiMessages = messages.results;
 
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize a thread when component mounts if none exists
   useEffect(() => {
     const initThread = async () => {
-      const newThreadId = await createThread({
-        userId,
-        title: 'Database Query Chat',
-      });
+      const existing = localStorage.getItem('db-query-thread-id');
+      if (existing) {
+        setThreadId(existing);
+        return;
+      }
+
+      const newThreadId = await createThread({});
+      localStorage.setItem('db-query-thread-id', newThreadId);
       setThreadId(newThreadId);
     };
-    initThread();
+
+    void initThread();
   }, [createThread]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [uiMessages]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +88,7 @@ export function ChatInterface() {
     setSending(true);
 
     try {
-      await sendMessage({ threadId, message });
+      await sendMessage({ threadId, prompt: message });
     } catch (e) {
       console.error('Failed to send message:', e);
     } finally {
@@ -61,94 +96,272 @@ export function ChatInterface() {
     }
   };
 
+  const handleNewThread = async () => {
+    localStorage.removeItem('db-query-thread-id');
+    const newThreadId = await createThread({});
+    localStorage.setItem('db-query-thread-id', newThreadId);
+    setThreadId(newThreadId);
+  };
+
+  const isReady = !!threadId;
+
   return (
-    <Card className="flex flex-col h-[600px] w-full max-w-3xl mx-auto shadow-2xl rounded-2xl overflow-hidden border-zinc-800 bg-zinc-950 text-zinc-100">
-      <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-500/20 rounded-lg">
-            <Database className="w-5 h-5 text-emerald-400" />
+    <TooltipProvider delay={300}>
+      <div className="flex h-screen w-full flex-col bg-background">
+        {/* Top bar */}
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Database weight="duotone" className="size-4 text-primary" />
+              <span className="text-sm font-medium">Database Query Agent</span>
+            </div>
+            <Separator orientation="vertical" className="h-4" />
+            <Badge variant={isReady ? 'secondary' : 'outline'} className="gap-1">
+              {isReady ? (
+                <>
+                  <span className="size-1.5 rounded-full bg-emerald-500 inline-block" />
+                  ready
+                </>
+              ) : (
+                <>
+                  <CircleNotch className="size-3 animate-spin" />
+                  connecting
+                </>
+              )}
+            </Badge>
           </div>
-          <div>
-            <h2 className="font-semibold text-zinc-100">
-              Database Query Agent
-            </h2>
-            <p className="text-xs text-zinc-400">
-              Ask questions in natural language
+
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={handleNewThread}
+                    disabled={!isReady}
+                  >
+                    <ArrowsClockwise className="size-3.5" />
+                  </Button>
+                }
+              />
+              <TooltipContent side="bottom">New conversation</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+
+        {/* Messages area */}
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="flex flex-col gap-0 px-0">
+            {uiMessages.length === 0 ? (
+              <EmptyState />
+            ) : (
+              uiMessages.map((msg, index) => (
+                <MessageRow
+                  key={index}
+                  role={msg.role}
+                  text={messageText(msg)}
+                  isLast={index === uiMessages.length - 1}
+                />
+              ))
+            )}
+
+            {sending && <ThinkingRow />}
+            <div ref={messagesEndRef} className="h-4" />
+          </div>
+        </ScrollArea>
+
+        {/* Input footer */}
+        <div className="shrink-0 border-t bg-background px-4 py-3">
+          <form onSubmit={handleSend}>
+            <InputGroup className="h-auto rounded-none">
+              <InputGroupAddon align="inline-start">
+                <Terminal weight="duotone" className="size-4 text-muted-foreground" />
+              </InputGroupAddon>
+              <InputGroupInput
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask anything about your database..."
+                disabled={sending || !isReady}
+                className="py-2.5 text-xs"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSend(e as any);
+                  }
+                }}
+              />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  type="submit"
+                  size="icon-sm"
+                  disabled={sending || !input.trim() || !isReady}
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-foreground data-[disabled=false]:hover:text-foreground disabled:opacity-40"
+                >
+                  {sending ? (
+                    <CircleNotch className="size-3.5 animate-spin" />
+                  ) : (
+                    <PaperPlaneRight weight="fill" className="size-3.5" />
+                  )}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+            <p className="mt-1.5 text-[10px] text-muted-foreground/60 pl-0.5">
+              Press Enter to send &middot; natural language queries supported
             </p>
-          </div>
+          </form>
+        </div>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function EmptyState() {
+  const suggestions = [
+    'Show all users created in the last 7 days',
+    'Count records grouped by status',
+    'Find the top 10 most active accounts',
+    'List tables with row counts',
+  ];
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-6 px-8 py-20 text-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="flex size-12 items-center justify-center border bg-muted">
+          <Database weight="duotone" className="size-6 text-muted-foreground" />
+        </div>
+        <div>
+          <p className="text-sm font-medium">Query your database</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Ask questions in plain English — no SQL required
+          </p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-950 custom-scrollbar">
-        {(!messages || messages.length === 0) && (
-          <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-4">
-            <Database className="w-12 h-12 opacity-20" />
-            <p>No messages yet. Start querying your database!</p>
-          </div>
-        )}
-        {messages?.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
+      <div className="w-full max-w-lg">
+        <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
+          Try asking
+        </p>
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {suggestions.map((s) => (
             <div
-              className={`max-w-[80%] rounded-2xl p-4 shadow-sm ${
-                msg.role === 'user'
-                  ? 'bg-emerald-600 text-white rounded-br-sm'
-                  : 'bg-zinc-800/80 text-zinc-200 rounded-bl-sm border border-zinc-700/50'
-              }`}
+              key={s}
+              className="flex items-start gap-2 border bg-muted/30 px-3 py-2 text-left"
             >
-              <div className="text-xs font-medium mb-1 opacity-70">
-                {msg.role === 'user' ? 'You' : 'Query Agent'}
-              </div>
-              <div className="prose prose-sm prose-invert max-w-none">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
-              </div>
+              <Sparkle weight="duotone" className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">{s}</span>
             </div>
-          </div>
-        ))}
-        {sending && (
-          <div className="flex w-full justify-start">
-            <div className="max-w-[80%] rounded-2xl p-4 bg-zinc-800/80 text-zinc-200 rounded-bl-sm border border-zinc-700/50">
-              <div className="flex gap-1.5 items-center h-5">
-                <span
-                  className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce"
-                  style={{ animationDelay: '0ms' }}
-                ></span>
-                <span
-                  className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce"
-                  style={{ animationDelay: '150ms' }}
-                ></span>
-                <span
-                  className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce"
-                  style={{ animationDelay: '300ms' }}
-                ></span>
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageRow({
+  role,
+  text,
+  isLast,
+}: {
+  role: string;
+  text: string;
+  isLast: boolean;
+}) {
+  const isUser = role === 'user';
+
+  return (
+    <div
+      className={`group flex gap-0 border-b transition-colors ${
+        isUser
+          ? 'bg-muted/20 hover:bg-muted/30'
+          : 'bg-background hover:bg-muted/10'
+      }`}
+    >
+      {/* Role gutter */}
+      <div className="flex w-[52px] shrink-0 flex-col items-center pt-3.5 pb-3">
+        <div
+          className={`flex size-6 items-center justify-center border ${
+            isUser
+              ? 'border-border bg-background text-foreground'
+              : 'border-primary/30 bg-primary/5 text-primary'
+          }`}
+        >
+          {isUser ? (
+            <User weight="fill" className="size-3" />
+          ) : (
+            <Robot weight="duotone" className="size-3" />
+          )}
+        </div>
       </div>
 
-      <div className="p-4 bg-zinc-900 border-t border-zinc-800">
-        <form onSubmit={handleSend} className="relative flex items-center">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="E.g. Get me all users created last week..."
-            disabled={sending || !threadId}
-            className="w-full pl-4 pr-12 py-6 rounded-xl bg-zinc-950 border-zinc-700 focus-visible:ring-emerald-500/50 text-zinc-100 placeholder:text-zinc-600 shadow-inner"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            disabled={sending || !input.trim() || !threadId}
-            className="absolute right-1.5 w-10 h-10 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
-          >
-            <PaperPlaneRight weight="fill" />
-          </Button>
-        </form>
+      {/* Content */}
+      <div className="min-w-0 flex-1 px-2 py-3">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {isUser ? 'You' : 'Agent'}
+          </span>
+        </div>
+        <p className="whitespace-pre-wrap text-xs/relaxed text-foreground">
+          {text}
+        </p>
       </div>
-    </Card>
+    </div>
   );
+}
+
+function ThinkingRow() {
+  return (
+    <div className="flex gap-0 border-b bg-background">
+      {/* Role gutter */}
+      <div className="flex w-[52px] shrink-0 flex-col items-center pt-3.5 pb-3">
+        <div className="flex size-6 items-center justify-center border border-primary/30 bg-primary/5 text-primary">
+          <Robot weight="duotone" className="size-3" />
+        </div>
+      </div>
+
+      {/* Thinking indicator */}
+      <div className="min-w-0 flex-1 px-2 py-3">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Agent
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+            style={{ animationDelay: '0ms' }}
+          />
+          <span
+            className="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+            style={{ animationDelay: '150ms' }}
+          />
+          <span
+            className="size-1.5 rounded-full bg-muted-foreground/60 animate-bounce"
+            style={{ animationDelay: '300ms' }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function messageText(message: any) {
+  if (typeof message?.text === 'string' && message.text.length > 0) {
+    return message.text;
+  }
+
+  if (typeof message?.content === 'string' && message.content.length > 0) {
+    return message.content;
+  }
+
+  if (Array.isArray(message?.parts)) {
+    const text = message.parts
+      .filter((part: any) => part.type === 'text')
+      .map((part: any) => part.text)
+      .join('\n');
+    if (text.length > 0) return text;
+  }
+
+  return '...';
 }

@@ -1,5 +1,9 @@
-import { QueryApp } from "@/components/query-app"
+import { ChatInterface } from '@/components/chat-interface';
 
 export default function Page() {
-  return <QueryApp />
+  return (
+    <div className="h-screen w-screen overflow-hidden">
+      <ChatInterface />
+    </div>
+  );
 }

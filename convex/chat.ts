@@ -1,69 +1,64 @@
-import { action, internalMutation } from './_generated/server';
+import { createThread, listMessages, saveMessage } from '@convex-dev/agent';
+import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
+import { components, internal } from './_generated/api';
+import { action, internalAction, mutation, query } from './_generated/server';
 import { agent } from './agent';
-import { internal } from './_generated/api';
-import { crashTools } from './tools';
 
-// Internal mutation to add a user message to the thread
-export const addUserMessage = internalMutation({
-  args: {
-    threadId: v.id('threads'),
-    content: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.insert('messages', {
-      threadId: args.threadId,
-      role: 'user',
-      content: args.content,
-      createdAt: Date.now(),
+export const createChatThread = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await createThread(ctx, components.agent, {
+      title: 'Natural language database query',
     });
-    await ctx.db.patch(args.threadId, { lastMessageAt: Date.now() });
   },
 });
 
-// Internal mutation to save the final complete response
-export const saveResponse = internalMutation({
+export const sendMessage = mutation({
   args: {
-    threadId: v.id('threads'),
-    content: v.string(),
+    threadId: v.string(),
+    prompt: v.string(),
   },
-  handler: async (ctx, args) => {
-    await ctx.db.insert('messages', {
-      threadId: args.threadId,
-      role: 'assistant',
-      content: args.content,
-      createdAt: Date.now(),
+  handler: async (ctx, { threadId, prompt }) => {
+    const { messageId } = await saveMessage(ctx, components.agent, {
+      threadId,
+      prompt,
     });
-    await ctx.db.patch(args.threadId, { lastMessageAt: Date.now() });
+
+    await ctx.scheduler.runAfter(0, (internal as any).chat.generateResponse, {
+      threadId,
+      promptMessageId: messageId,
+    });
   },
 });
 
-export const sendMessage = action({
+export const generateResponse = internalAction({
   args: {
-    threadId: v.id('threads'),
-    message: v.string(),
+    threadId: v.string(),
+    promptMessageId: v.string(),
   },
-  returns: v.null(),
+  handler: async (ctx, { threadId, promptMessageId }) => {
+    await (agent as any).generateText(ctx, { threadId }, { promptMessageId });
+  },
+});
+
+export const listThreadMessages = query({
+  args: {
+    threadId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
   handler: async (ctx, args) => {
-    await ctx.runMutation((internal as any).chat.addUserMessage, {
-      threadId: args.threadId,
-      content: args.message,
-    });
+    return await listMessages(ctx, components.agent, args);
+  },
+});
 
-    const response = await (agent as any).generateText(
-      ctx,
-      { threadId: args.threadId },
-      {
-        messages: [{ role: 'user', content: args.message }],
-        tools: crashTools,
-      },
-    );
-
-    await ctx.runMutation((internal as any).chat.saveResponse, {
-      threadId: args.threadId,
-      content: response.text ?? '',
-    });
-
-    return null;
+export const generateTextInAction = action({
+  args: {
+    threadId: v.string(),
+    prompt: v.string(),
+  },
+  handler: async (ctx, { threadId, prompt }) => {
+    const result = await (agent as any).generateText(ctx, { threadId }, { prompt });
+    return result.text;
   },
 });
