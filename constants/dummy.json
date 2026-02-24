@@ -1,0 +1,205 @@
+[
+  {
+    "vehicleId": ["AP16AA1001", "AP16BB2001"],
+    "location": ["16.3067", "80.4365"],
+    "timeStamp": "2026-02-24T08:00:01Z"
+  },
+  {
+    "vehicleId": ["AP16AA1002"],
+    "location": ["16.3070", "80.4370"],
+    "timeStamp": "2026-02-24T08:02:10Z"
+  },
+  {
+    "vehicleId": ["AP16AA1003", "AP16CC3003"],
+    "location": ["16.3080", "80.4380"],
+    "timeStamp": "2026-02-24T08:05:22Z"
+  },
+  {
+    "vehicleId": ["AP16AA1004"],
+    "location": ["16.3090", "80.4390"],
+    "timeStamp": "2026-02-24T08:08:45Z"
+  },
+  {
+    "vehicleId": ["AP16AA1005", "AP16DD4005"],
+    "location": ["16.3100", "80.4400"],
+    "timeStamp": "2026-02-24T08:12:11Z"
+  },
+  {
+    "vehicleId": ["AP16AA1006"],
+    "location": ["16.3110", "80.4410"],
+    "timeStamp": "2026-02-24T08:15:30Z"
+  },
+  {
+    "vehicleId": ["AP16AA1007", "AP16EE5007"],
+    "location": ["16.3120", "80.4420"],
+    "timeStamp": "2026-02-24T08:18:55Z"
+  },
+  {
+    "vehicleId": ["AP16AA1008"],
+    "location": ["16.3130", "80.4430"],
+    "timeStamp": "2026-02-24T08:22:10Z"
+  },
+  {
+    "vehicleId": ["AP16AA1009", "AP16FF6009"],
+    "location": ["16.3140", "80.4440"],
+    "timeStamp": "2026-02-24T08:25:44Z"
+  },
+  {
+    "vehicleId": ["AP16AA1010"],
+    "location": ["16.3150", "80.4450"],
+    "timeStamp": "2026-02-24T08:29:01Z"
+  },
+
+  {
+    "vehicleId": ["AP16AA1011", "AP16GG7011"],
+    "location": ["16.3160", "80.4460"],
+    "timeStamp": "2026-02-24T08:32:15Z"
+  },
+  {
+    "vehicleId": ["AP16AA1012"],
+    "location": ["16.3170", "80.4470"],
+    "timeStamp": "2026-02-24T08:35:30Z"
+  },
+  {
+    "vehicleId": ["AP16AA1013", "AP16HH8013"],
+    "location": ["16.3180", "80.4480"],
+    "timeStamp": "2026-02-24T08:38:49Z"
+  },
+  {
+    "vehicleId": ["AP16AA1014"],
+    "location": ["16.3190", "80.4490"],
+    "timeStamp": "2026-02-24T08:42:12Z"
+  },
+  {
+    "vehicleId": ["AP16AA1015", "AP16II9015"],
+    "location": ["16.3200", "80.4500"],
+    "timeStamp": "2026-02-24T08:45:27Z"
+  },
+  {
+    "vehicleId": ["AP16AA1016"],
+    "location": ["16.3210", "80.4510"],
+    "timeStamp": "2026-02-24T08:48:40Z"
+  },
+  {
+    "vehicleId": ["AP16AA1017", "AP16JJ0017"],
+    "location": ["16.3220", "80.4520"],
+    "timeStamp": "2026-02-24T08:52:05Z"
+  },
+  {
+    "vehicleId": ["AP16AA1018"],
+    "location": ["16.3230", "80.4530"],
+    "timeStamp": "2026-02-24T08:55:20Z"
+  },
+  {
+    "vehicleId": ["AP16AA1019", "AP16KK1019"],
+    "location": ["16.3240", "80.4540"],
+    "timeStamp": "2026-02-24T08:58:36Z"
+  },
+  {
+    "vehicleId": ["AP16AA1020"],
+    "location": ["16.3250", "80.4550"],
+    "timeStamp": "2026-02-24T09:02:01Z"
+  },
+
+  {
+    "vehicleId": ["AP16AA1021", "AP16LL2021"],
+    "location": ["16.3260", "80.4560"],
+    "timeStamp": "2026-02-24T09:05:18Z"
+  },
+  {
+    "vehicleId": ["AP16AA1022"],
+    "location": ["16.3270", "80.4570"],
+    "timeStamp": "2026-02-24T09:08:30Z"
+  },
+  {
+    "vehicleId": ["AP16AA1023", "AP16MM3023"],
+    "location": ["16.3280", "80.4580"],
+    "timeStamp": "2026-02-24T09:11:47Z"
+  },
+  {
+    "vehicleId": ["AP16AA1024"],
+    "location": ["16.3290", "80.4590"],
+    "timeStamp": "2026-02-24T09:15:05Z"
+  },
+  {
+    "vehicleId": ["AP16AA1025", "AP16NN4025"],
+    "location": ["16.3300", "80.4600"],
+    "timeStamp": "2026-02-24T09:18:19Z"
+  },
+  {
+    "vehicleId": ["AP16AA1026"],
+    "location": ["16.3310", "80.4610"],
+    "timeStamp": "2026-02-24T09:21:33Z"
+  },
+  {
+    "vehicleId": ["AP16AA1027", "AP16OO5027"],
+    "location": ["16.3320", "80.4620"],
+    "timeStamp": "2026-02-24T09:24:50Z"
+  },
+  {
+    "vehicleId": ["AP16AA1028"],
+    "location": ["16.3330", "80.4630"],
+    "timeStamp": "2026-02-24T09:28:10Z"
+  },
+  {
+    "vehicleId": ["AP16AA1029", "AP16PP6029"],
+    "location": ["16.3340", "80.4640"],
+    "timeStamp": "2026-02-24T09:31:25Z"
+  },
+  {
+    "vehicleId": ["AP16AA1030"],
+    "location": ["16.3350", "80.4650"],
+    "timeStamp": "2026-02-24T09:34:40Z"
+  },
+
+  {
+    "vehicleId": ["AP16AA1031", "AP16QQ7031"],
+    "location": ["16.3360", "80.4660"],
+    "timeStamp": "2026-02-24T09:37:55Z"
+  },
+  {
+    "vehicleId": ["AP16AA1032"],
+    "location": ["16.3370", "80.4670"],
+    "timeStamp": "2026-02-24T09:41:12Z"
+  },
+  {
+    "vehicleId": ["AP16AA1033", "AP16RR8033"],
+    "location": ["16.3380", "80.4680"],
+    "timeStamp": "2026-02-24T09:44:29Z"
+  },
+  {
+    "vehicleId": ["AP16AA1034"],
+    "location": ["16.3390", "80.4690"],
+    "timeStamp": "2026-02-24T09:47:48Z"
+  },
+  {
+    "vehicleId": ["AP16AA1035", "AP16SS9035"],
+    "location": ["16.3400", "80.4700"],
+    "timeStamp": "2026-02-24T09:51:03Z"
+  },
+  {
+    "vehicleId": ["AP16AA1036"],
+    "location": ["16.3410", "80.4710"],
+    "timeStamp": "2026-02-24T09:54:22Z"
+  },
+  {
+    "vehicleId": ["AP16AA1037", "AP16TT0037"],
+    "location": ["16.3420", "80.4720"],
+    "timeStamp": "2026-02-24T09:57:40Z"
+  },
+  {
+    "vehicleId": ["AP16AA1038"],
+    "location": ["16.3430", "80.4730"],
+    "timeStamp": "2026-02-24T10:00:55Z"
+  },
+  {
+    "vehicleId": ["AP16AA1039", "AP16UU1039"],
+    "location": ["16.3440", "80.4740"],
+    "timeStamp": "2026-02-24T10:04:11Z"
+  },
+  {
+    "vehicleId": ["AP16AA1040"],
+    "location": ["16.3450", "80.4750"],
+    "timeStamp": "2026-02-24T10:07:30Z"
+  }
+]
