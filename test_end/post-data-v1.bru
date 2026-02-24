@@ -1,0 +1,29 @@
+meta {
+  name: POST data v1
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:3000/api/data/v1
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "message": "hello world",
+    "value": 42
+  }
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("response body matches request body", function() {
+    expect(res.body.message).to.equal("hello world");
+    expect(res.body.value).to.equal(42);
+  });
+}
