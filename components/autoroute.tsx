@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Check, Loader2, Navigation } from "lucide-react";
+import { AlertTriangle, Loader2, Navigation } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,108 +12,92 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 
 type LatLngLiteral = { lat: number; lng: number };
-type GeoPoint = LatLngLiteral | { lat: () => number; lng: () => number };
 
-type DirectionsStatus = string;
-
-type DirectionsRequest = {
-  origin: string;
-  destination: string;
-  travelMode: "DRIVING";
-  provideRouteAlternatives?: boolean;
-  waypoints?: Array<{
-    location: LatLngLiteral;
-    stopover: boolean;
-  }>;
-};
-
-type DirectionsStep = {
-  html_instructions?: string;
-  start_location: GeoPoint;
-  distance?: { text: string };
-};
-
-type DirectionsLeg = {
-  steps: DirectionsStep[];
-  distance?: { text: string };
-  duration?: { text: string };
-};
-
-type DirectionsRoute = {
-  legs: DirectionsLeg[];
-  overview_path: GeoPoint[];
-};
-
-type DirectionsResult = {
-  routes: DirectionsRoute[];
-};
-
-type MapInstance = {
-  fitBounds: (bounds: BoundsInstance) => void;
-};
-
-type BoundsInstance = {
-  extend: (point: GeoPoint) => void;
-};
-
-type DirectionsRenderer = {
-  setMap: (map: MapInstance | null) => void;
-  setDirections: (result: DirectionsResult) => void;
-  setRouteIndex: (index: number) => void;
-};
-
-type GoogleMapsApi = {
-  Map: new (
-    element: HTMLElement,
-    options: Record<string, unknown>,
-  ) => MapInstance;
-  LatLngBounds: new () => BoundsInstance;
-  DirectionsService: new () => {
-    route: (
-      request: DirectionsRequest,
-      callback: (
-        result: DirectionsResult | null,
-        status: DirectionsStatus,
-      ) => void,
-    ) => void;
+type OsrmStep = {
+  distance: number;
+  maneuver: {
+    location: [number, number];
   };
-  DirectionsRenderer: new (options: Record<string, unknown>) => DirectionsRenderer;
+};
+
+type OsrmLeg = {
+  distance: number;
+  duration: number;
+  steps: OsrmStep[];
+};
+
+type OsrmRoute = {
+  distance: number;
+  duration: number;
+  geometry: { coordinates: [number, number][] };
+  legs: OsrmLeg[];
+};
+
+type OsrmResponse = {
+  code: string;
+  routes: OsrmRoute[];
+};
+
+type LeafletMapClickEvent = {
+  latlng: { lat: number; lng: number };
+};
+
+type LeafletMap = {
+  fitBounds: (bounds: LeafletBounds, options?: { padding?: [number, number] }) => void;
+  setView: (center: [number, number], zoom: number) => LeafletMap;
+  removeLayer: (layer: LeafletLayer) => void;
+  on: (event: "click", handler: (event: LeafletMapClickEvent) => void) => void;
+  off: (event: "click", handler: (event: LeafletMapClickEvent) => void) => void;
+};
+
+type LeafletLayer = {
+  addTo: (map: LeafletMap) => LeafletLayer;
+  bindPopup?: (content: string) => LeafletLayer;
+};
+
+type LeafletBounds = {
+  extend: (point: [number, number]) => void;
+};
+
+type LeafletApi = {
+  map: (element: HTMLElement) => LeafletMap;
+  tileLayer: (url: string, options: Record<string, unknown>) => LeafletLayer;
+  latLngBounds: (points: [number, number][]) => LeafletBounds;
+  polyline: (
+    latlngs: [number, number][],
+    options?: Record<string, unknown>,
+  ) => LeafletLayer;
+  circleMarker: (
+    latlng: [number, number],
+    options?: Record<string, unknown>,
+  ) => LeafletLayer;
 };
 
 declare global {
   interface Window {
-    google?: {
-      maps: GoogleMapsApi;
-    };
+    L?: LeafletApi;
   }
 }
 
-type CenterPoint = {
-  id: string;
-  title: string;
-  detail: string;
-  location: LatLngLiteral;
-};
-
-const GOOGLE_MAPS_SCRIPT_ID = "autoroute-google-maps-script";
-const MAX_CENTERS = 7;
+const LEAFLET_SCRIPT_ID = "autoroute-leaflet-script";
+const LEAFLET_STYLE_ID = "autoroute-leaflet-style";
 const ALTERNATE_SAFE_RADIUS_METERS = 350;
 const DETOUR_OFFSET_DEGREES = 0.016;
 
-function toLiteral(point: GeoPoint): LatLngLiteral {
-  if (typeof point.lat === "function") {
-    return { lat: point.lat(), lng: point.lng() };
-  }
-  return point;
-}
-
-function stripHtml(input: string) {
-  return input.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-}
+// Google Maps implementation is intentionally disabled.
+// const GOOGLE_MAPS_SCRIPT_ID = "autoroute-google-maps-script";
+// const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 function haversineMeters(a: LatLngLiteral, b: LatLngLiteral) {
   const R = 6371000;
@@ -142,210 +126,252 @@ function buildBypassWaypoints(point: LatLngLiteral): [LatLngLiteral, LatLngLiter
   return [left, right];
 }
 
-function centersFromRoute(route: DirectionsRoute) {
-  const firstLeg = route.legs[0];
-  if (!firstLeg?.steps?.length) {
-    return [];
-  }
-
-  const sampledStepIndexes = new Set<number>([0, firstLeg.steps.length - 1]);
-  const stride = Math.max(1, Math.floor(firstLeg.steps.length / MAX_CENTERS));
-  for (let i = 0; i < firstLeg.steps.length; i += stride) {
-    sampledStepIndexes.add(i);
-  }
-
-  const sorted = [...sampledStepIndexes].sort((a, b) => a - b).slice(0, MAX_CENTERS);
-
-  return sorted.map((stepIndex, idx) => {
-    const step = firstLeg.steps[stepIndex];
-    const instruction =
-      stripHtml(step.html_instructions || "") || `Center ${idx + 1}`;
-
-    return {
-      id: `${stepIndex}-${idx}`,
-      title: instruction,
-      detail: step.distance?.text || "Along route",
-      location: toLiteral(step.start_location),
-    };
-  });
+function metersToText(meters: number) {
+  if (!Number.isFinite(meters)) return "n/a";
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.round(meters)} m`;
 }
 
-function mapReady() {
-  return typeof window !== "undefined" && !!window.google?.maps;
+function secondsToText(seconds: number) {
+  if (!Number.isFinite(seconds)) return "n/a";
+  const totalMinutes = Math.round(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes} min`;
+  return `${hours}h ${minutes}m`;
 }
 
-async function loadGoogleMaps(apiKey: string) {
-  if (mapReady()) {
-    return;
+async function ensureLeafletLoaded() {
+  if (typeof window === "undefined") {
+    throw new Error("Leaflet can only load in the browser.");
+  }
+  if (window.L) {
+    return window.L;
   }
 
-  const existing = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as
+  let style = document.getElementById(LEAFLET_STYLE_ID) as HTMLLinkElement | null;
+  if (!style) {
+    style = document.createElement("link");
+    style.id = LEAFLET_STYLE_ID;
+    style.rel = "stylesheet";
+    style.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(style);
+  }
+
+  const existingScript = document.getElementById(LEAFLET_SCRIPT_ID) as
     | HTMLScriptElement
     | null;
 
-  if (existing) {
+  if (existingScript) {
     await new Promise<void>((resolve, reject) => {
-      if (mapReady()) {
+      if (window.L) {
         resolve();
         return;
       }
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Google Maps failed to load.")), {
-        once: true,
-      });
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("Leaflet failed to load.")),
+        { once: true },
+      );
     });
-    return;
+  } else {
+    const script = document.createElement("script");
+    script.id = LEAFLET_SCRIPT_ID;
+    script.async = true;
+    script.defer = true;
+    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+
+    await new Promise<void>((resolve, reject) => {
+      script.addEventListener("load", () => resolve(), { once: true });
+      script.addEventListener(
+        "error",
+        () => reject(new Error("Leaflet failed to load.")),
+        { once: true },
+      );
+      document.head.appendChild(script);
+    });
   }
 
-  const script = document.createElement("script");
-  script.id = GOOGLE_MAPS_SCRIPT_ID;
-  script.async = true;
-  script.defer = true;
-  script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+  if (!window.L) {
+    throw new Error("Leaflet did not initialize correctly.");
+  }
 
-  await new Promise<void>((resolve, reject) => {
-    script.addEventListener("load", () => resolve(), { once: true });
-    script.addEventListener("error", () => reject(new Error("Google Maps failed to load.")), {
-      once: true,
-    });
-    document.head.appendChild(script);
+  return window.L;
+}
+
+async function geocodePlace(query: string) {
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("q", query);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "1");
+
+  const response = await fetch(url.toString(), {
+    headers: { Accept: "application/json" },
   });
+
+  if (!response.ok) {
+    throw new Error("Unable to resolve location.");
+  }
+
+  const payload = (await response.json()) as Array<{ lat: string; lon: string }>;
+  if (!Array.isArray(payload) || payload.length === 0) {
+    throw new Error(`Location not found: ${query}`);
+  }
+
+  return {
+    lat: Number(payload[0].lat),
+    lng: Number(payload[0].lon),
+  };
+}
+
+async function routeWithOsrm(args: {
+  origin: string;
+  destination: string;
+  alternatives: boolean;
+  waypoints?: LatLngLiteral[];
+}) {
+  const originPoint = await geocodePlace(args.origin);
+  const destinationPoint = await geocodePlace(args.destination);
+
+  const waypointCoords = (args.waypoints ?? []).map((wp) => `${wp.lng},${wp.lat}`);
+  const allCoords = [
+    `${originPoint.lng},${originPoint.lat}`,
+    ...waypointCoords,
+    `${destinationPoint.lng},${destinationPoint.lat}`,
+  ].join(";");
+
+  const url = new URL(`https://router.project-osrm.org/route/v1/driving/${allCoords}`);
+  url.searchParams.set("overview", "full");
+  url.searchParams.set("geometries", "geojson");
+  url.searchParams.set("steps", "true");
+  url.searchParams.set("alternatives", args.alternatives ? "true" : "false");
+
+  const response = await fetch(url.toString(), {
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error("Routing service is unavailable.");
+  }
+
+  const payload = (await response.json()) as OsrmResponse;
+  if (payload.code !== "Ok" || !payload.routes?.length) {
+    throw new Error("Could not generate route.");
+  }
+
+  return payload;
+}
+
+function formatLatLng(point: LatLngLiteral) {
+  return `${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}`;
 }
 
 export function AutoRoute() {
   const [onboardingPoint, setOnboardingPoint] = React.useState("");
   const [dropoffPoint, setDropoffPoint] = React.useState("");
-  const [centers, setCenters] = React.useState<CenterPoint[]>([]);
-  const [selectedAccidentCenterId, setSelectedAccidentCenterId] = React.useState<string | null>(null);
-  const [summary, setSummary] = React.useState<{ distance: string; duration: string } | null>(null);
+  const [confirmedAccidentPoint, setConfirmedAccidentPoint] =
+    React.useState<LatLngLiteral | null>(null);
+  const [pendingAccidentPoint, setPendingAccidentPoint] = React.useState<LatLngLiteral | null>(
+    null,
+  );
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = React.useState(false);
+  const [summary, setSummary] = React.useState<{ distance: string; duration: string } | null>(
+    null,
+  );
   const [isLoadingRoute, setIsLoadingRoute] = React.useState(false);
   const [error, setError] = React.useState("");
 
   const mapContainerRef = React.useRef<HTMLDivElement | null>(null);
-  const mapRef = React.useRef<MapInstance | null>(null);
-  const rendererRef = React.useRef<DirectionsRenderer | null>(null);
-  const directionsServiceRef = React.useRef<ReturnType<GoogleMapsApi["DirectionsService"]> | null>(null);
-  const initialResultRef = React.useRef<DirectionsResult | null>(null);
+  const mapRef = React.useRef<LeafletMap | null>(null);
+  const routeLayerRef = React.useRef<LeafletLayer | null>(null);
+  const accidentLayerRef = React.useRef<LeafletLayer | null>(null);
+  const initialResultRef = React.useRef<OsrmResponse | null>(null);
 
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const renderAccidentMarker = React.useCallback(async (accidentPoint: LatLngLiteral | null) => {
+    const map = mapRef.current;
+    if (!map) return;
 
-  const requestRoute = React.useCallback(
-    (request: DirectionsRequest) =>
-      new Promise<DirectionsResult>((resolve, reject) => {
-        const service = directionsServiceRef.current;
-        if (!service) {
-          reject(new Error("Directions service is unavailable."));
-          return;
-        }
-
-        service.route(request, (result, status) => {
-          if (!result || status !== "OK") {
-            reject(new Error(`Directions failed with status: ${status}`));
-            return;
-          }
-          resolve(result);
-        });
-      }),
-    [],
-  );
-
-  React.useEffect(() => {
-    let isMounted = true;
-
-    async function initializeMap() {
-      if (!apiKey) {
-        setError("Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your environment.");
-        return;
-      }
-      if (!mapContainerRef.current) {
-        return;
-      }
-
-      try {
-        await loadGoogleMaps(apiKey);
-        if (!isMounted || !mapContainerRef.current || !window.google?.maps) {
-          return;
-        }
-
-        const maps = window.google.maps;
-        mapRef.current = new maps.Map(mapContainerRef.current, {
-          center: { lat: 37.7749, lng: -122.4194 },
-          zoom: 12,
-          disableDefaultUI: true,
-          gestureHandling: "greedy",
-          clickableIcons: false,
-          styles: [
-            { featureType: "poi", stylers: [{ visibility: "off" }] },
-            { featureType: "transit", stylers: [{ visibility: "off" }] },
-          ],
-        });
-
-        rendererRef.current = new maps.DirectionsRenderer({
-          map: mapRef.current,
-          suppressMarkers: true,
-          preserveViewport: false,
-          polylineOptions: {
-            strokeColor: "#2563eb",
-            strokeWeight: 7,
-            strokeOpacity: 0.95,
-          },
-        });
-
-        directionsServiceRef.current = new maps.DirectionsService();
-        setError("");
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "Unable to initialize map.");
-      }
+    if (accidentLayerRef.current) {
+      map.removeLayer(accidentLayerRef.current);
+      accidentLayerRef.current = null;
     }
 
-    void initializeMap();
-
-    return () => {
-      isMounted = false;
-      rendererRef.current?.setMap(null);
-    };
-  }, [apiKey]);
-
-  const renderRoute = React.useCallback((result: DirectionsResult, routeIndex = 0) => {
-    const renderer = rendererRef.current;
-    if (!renderer) {
-      throw new Error("Map renderer is unavailable.");
+    if (!accidentPoint) {
+      return;
     }
 
-    renderer.setDirections(result);
-    renderer.setRouteIndex(routeIndex);
+    const L = await ensureLeafletLoaded();
+    const marker = L.circleMarker([accidentPoint.lat, accidentPoint.lng], {
+      radius: 8,
+      color: "#ffffff",
+      weight: 2,
+      fillColor: "#dc2626",
+      fillOpacity: 1,
+    }).addTo(map);
 
-    const selectedRoute = result.routes[routeIndex];
-    const bounds = window.google?.maps ? new window.google.maps.LatLngBounds() : null;
-    if (mapRef.current && bounds) {
-      selectedRoute.overview_path.forEach((point) => bounds.extend(point));
-      mapRef.current.fitBounds(bounds);
-    }
-
-    const leg = selectedRoute.legs[0];
-    setSummary({
-      distance: leg?.distance?.text || "n/a",
-      duration: leg?.duration?.text || "n/a",
-    });
+    marker.bindPopup?.(`<b>Accident point</b><br/>${formatLatLng(accidentPoint)}`);
+    accidentLayerRef.current = marker;
   }, []);
 
+  const renderRoute = React.useCallback(
+    async (result: OsrmResponse, routeIndex = 0, accidentPoint: LatLngLiteral | null = null) => {
+      const map = mapRef.current;
+      if (!map) {
+        throw new Error("Map renderer is unavailable.");
+      }
+
+      const L = await ensureLeafletLoaded();
+      const selectedRoute = result.routes[routeIndex];
+      if (!selectedRoute) {
+        throw new Error("Route index is unavailable.");
+      }
+
+      if (routeLayerRef.current) {
+        map.removeLayer(routeLayerRef.current);
+      }
+
+      const latLngs = selectedRoute.geometry.coordinates.map(
+        ([lng, lat]) => [lat, lng] as [number, number],
+      );
+
+      routeLayerRef.current = L.polyline(latLngs, {
+        color: "#2563eb",
+        weight: 6,
+        opacity: 0.92,
+      }).addTo(map);
+
+      map.fitBounds(L.latLngBounds(latLngs), { padding: [25, 25] });
+
+      const leg = selectedRoute.legs[0];
+      setSummary({
+        distance: metersToText(leg?.distance ?? selectedRoute.distance),
+        duration: secondsToText(leg?.duration ?? selectedRoute.duration),
+      });
+
+      await renderAccidentMarker(accidentPoint);
+    },
+    [renderAccidentMarker],
+  );
+
   const chooseDetourFromAlternatives = React.useCallback(
-    (center: CenterPoint, result: DirectionsResult) => {
+    (accidentPoint: LatLngLiteral, result: OsrmResponse) => {
       let bestIndex = -1;
       let bestMinDistance = -1;
 
       result.routes.forEach((route, routeIndex) => {
-        if (routeIndex === 0) {
-          return;
-        }
+        if (routeIndex === 0) return;
 
-        const locations = route.legs[0]?.steps.map((step) => toLiteral(step.start_location)) ?? [];
-        if (!locations.length) {
-          return;
-        }
+        const locations =
+          route.legs[0]?.steps.map((step) => {
+            const [lng, lat] = step.maneuver.location;
+            return { lat, lng };
+          }) ?? [];
+
+        if (!locations.length) return;
 
         const minDistance = locations.reduce((min, location) => {
-          const distance = haversineMeters(location, center.location);
+          const distance = haversineMeters(location, accidentPoint);
           return Math.min(min, distance);
         }, Number.POSITIVE_INFINITY);
 
@@ -364,218 +390,277 @@ export function AutoRoute() {
     [],
   );
 
+  const applyAccidentRouting = React.useCallback(
+    async (accidentPoint: LatLngLiteral | null, baseResult: OsrmResponse) => {
+      if (!accidentPoint) {
+        await renderRoute(baseResult, 0, null);
+        return;
+      }
+
+      const detourIndex = chooseDetourFromAlternatives(accidentPoint, baseResult);
+      if (detourIndex !== null) {
+        await renderRoute(baseResult, detourIndex, accidentPoint);
+        return;
+      }
+
+      const [leftBypass, rightBypass] = buildBypassWaypoints(accidentPoint);
+      const detourResult = await routeWithOsrm({
+        origin: onboardingPoint.trim(),
+        destination: dropoffPoint.trim(),
+        alternatives: false,
+        waypoints: [leftBypass, rightBypass],
+      });
+
+      await renderRoute(detourResult, 0, accidentPoint);
+    },
+    [chooseDetourFromAlternatives, dropoffPoint, onboardingPoint, renderRoute],
+  );
+
+  React.useEffect(() => {
+    let isMounted = true;
+    let mapClickHandler: ((event: LeafletMapClickEvent) => void) | null = null;
+
+    async function initializeMap() {
+      if (!mapContainerRef.current) return;
+
+      try {
+        const L = await ensureLeafletLoaded();
+        if (!isMounted || !mapContainerRef.current) return;
+
+        const map = L.map(mapContainerRef.current).setView([17.385, 78.4867], 11);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap contributors",
+          maxZoom: 19,
+        }).addTo(map);
+
+        mapClickHandler = (event) => {
+          setPendingAccidentPoint({ lat: event.latlng.lat, lng: event.latlng.lng });
+          setIsConfirmDialogOpen(true);
+        };
+
+        map.on("click", mapClickHandler);
+        mapRef.current = map;
+        setError("");
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "Unable to initialize map.");
+      }
+    }
+
+    void initializeMap();
+
+    return () => {
+      isMounted = false;
+      if (mapRef.current && mapClickHandler) {
+        mapRef.current.off("click", mapClickHandler);
+      }
+    };
+  }, []);
+
   const startRouting = React.useCallback(async () => {
     if (!onboardingPoint.trim() || !dropoffPoint.trim()) {
       setError("Enter both onboarding and drop-off points.");
       return;
     }
-    if (!directionsServiceRef.current || !rendererRef.current) {
+    if (!mapRef.current) {
       setError("Map is still initializing. Try again in a moment.");
       return;
     }
 
     setIsLoadingRoute(true);
     setError("");
-    setSelectedAccidentCenterId(null);
 
     try {
-      const result = await requestRoute({
+      const result = await routeWithOsrm({
         origin: onboardingPoint.trim(),
         destination: dropoffPoint.trim(),
-        travelMode: "DRIVING",
-        provideRouteAlternatives: true,
+        alternatives: true,
       });
 
       initialResultRef.current = result;
-      renderRoute(result, 0);
-      setCenters(centersFromRoute(result.routes[0]));
+      await applyAccidentRouting(confirmedAccidentPoint, result);
     } catch (routeError) {
       setError(routeError instanceof Error ? routeError.message : "Could not generate route.");
-      setCenters([]);
       setSummary(null);
       initialResultRef.current = null;
+      await renderAccidentMarker(confirmedAccidentPoint);
     } finally {
       setIsLoadingRoute(false);
     }
-  }, [dropoffPoint, onboardingPoint, renderRoute, requestRoute]);
+  }, [
+    applyAccidentRouting,
+    confirmedAccidentPoint,
+    dropoffPoint,
+    onboardingPoint,
+    renderAccidentMarker,
+  ]);
 
-  const handleCenterToggle = React.useCallback(
-    async (center: CenterPoint) => {
-      if (!initialResultRef.current) {
-        return;
-      }
+  const confirmAccidentPoint = React.useCallback(async () => {
+    if (!pendingAccidentPoint) return;
 
-      const nextSelectedId = selectedAccidentCenterId === center.id ? null : center.id;
-      setSelectedAccidentCenterId(nextSelectedId);
-      setError("");
+    const selectedPoint = pendingAccidentPoint;
+    setPendingAccidentPoint(null);
+    setIsConfirmDialogOpen(false);
+    setConfirmedAccidentPoint(selectedPoint);
+    setError("");
 
-      if (!nextSelectedId) {
-        renderRoute(initialResultRef.current, 0);
-        return;
-      }
+    if (!initialResultRef.current) {
+      await renderAccidentMarker(selectedPoint);
+      return;
+    }
 
-      setIsLoadingRoute(true);
-      try {
-        const detourIndex = chooseDetourFromAlternatives(center, initialResultRef.current);
-        if (detourIndex !== null) {
-          renderRoute(initialResultRef.current, detourIndex);
-          return;
-        }
+    setIsLoadingRoute(true);
+    try {
+      await applyAccidentRouting(selectedPoint, initialResultRef.current);
+    } catch (detourError) {
+      await renderRoute(initialResultRef.current, 0, null);
+      setConfirmedAccidentPoint(null);
+      setError(
+        detourError instanceof Error
+          ? `Detour unavailable: ${detourError.message}`
+          : "Could not apply detour.",
+      );
+    } finally {
+      setIsLoadingRoute(false);
+    }
+  }, [applyAccidentRouting, pendingAccidentPoint, renderAccidentMarker, renderRoute]);
 
-        const [leftBypass, rightBypass] = buildBypassWaypoints(center.location);
-        const detourResult = await requestRoute({
-          origin: onboardingPoint.trim(),
-          destination: dropoffPoint.trim(),
-          travelMode: "DRIVING",
-          provideRouteAlternatives: false,
-          waypoints: [
-            { location: leftBypass, stopover: false },
-            { location: rightBypass, stopover: false },
-          ],
-        });
-        renderRoute(detourResult, 0);
-      } catch (detourError) {
-        renderRoute(initialResultRef.current, 0);
-        setSelectedAccidentCenterId(null);
-        setError(
-          detourError instanceof Error
-            ? `Detour unavailable: ${detourError.message}`
-            : "Could not apply detour.",
-        );
-      } finally {
-        setIsLoadingRoute(false);
-      }
-    },
-    [
-      chooseDetourFromAlternatives,
-      dropoffPoint,
-      onboardingPoint,
-      renderRoute,
-      requestRoute,
-      selectedAccidentCenterId,
-    ],
-  );
+  const clearAccidentPoint = React.useCallback(async () => {
+    setConfirmedAccidentPoint(null);
+    setPendingAccidentPoint(null);
+    setIsConfirmDialogOpen(false);
+    setError("");
+
+    if (!initialResultRef.current) {
+      await renderAccidentMarker(null);
+      return;
+    }
+
+    setIsLoadingRoute(true);
+    try {
+      await applyAccidentRouting(null, initialResultRef.current);
+    } catch (routeError) {
+      setError(routeError instanceof Error ? routeError.message : "Could not reset route.");
+    } finally {
+      setIsLoadingRoute(false);
+    }
+  }, [applyAccidentRouting, renderAccidentMarker]);
 
   return (
-    <main className="min-h-screen bg-background px-4 py-6 md:px-6">
-      <div className="mx-auto grid max-w-[1500px] gap-4 lg:grid-cols-[7fr_3fr]">
-        <Card className="h-[86vh] min-h-[560px] overflow-hidden">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Navigation className="h-4 w-4" />
-                  AutoRoute
-                </CardTitle>
-                <CardDescription>
-                  Route-only map view. Mark an accident point to force a detour.
-                </CardDescription>
-              </div>
-              {summary ? (
-                <div className="flex gap-2">
-                  <Badge variant="secondary">{summary.distance}</Badge>
-                  <Badge variant="outline">{summary.duration}</Badge>
+    <>
+      <main className="min-h-screen bg-background px-4 py-6 md:px-6">
+        <div className="mx-auto grid max-w-[1500px] gap-4 lg:grid-cols-[7fr_3fr]">
+          <Card className="h-[86vh] min-h-[560px] overflow-hidden">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Navigation className="h-4 w-4" />
+                    AutoRoute
+                  </CardTitle>
+                  <CardDescription>
+                    Leaflet + OpenStreetMap route view. Click anywhere on map to mark accident.
+                  </CardDescription>
                 </div>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="h-[calc(100%-5.5rem)] p-4 pt-0">
-            <div ref={mapContainerRef} className="h-full w-full rounded-xl border border-border" />
-          </CardContent>
-        </Card>
+                {summary ? (
+                  <div className="flex gap-2">
+                    <Badge variant="secondary">{summary.distance}</Badge>
+                    <Badge variant="outline">{summary.duration}</Badge>
+                  </div>
+                ) : null}
+              </div>
+            </CardHeader>
+            <CardContent className="h-[calc(100%-5.5rem)] p-4 pt-0">
+              <div
+                ref={mapContainerRef}
+                className="relative z-0 h-full w-full rounded-xl border border-border"
+              />
+            </CardContent>
+          </Card>
 
-        <Card className="h-[86vh] min-h-[560px]">
-          <CardHeader>
-            <CardTitle>Route Controls</CardTitle>
-            <CardDescription>
-              Enter onboarding and drop-off. Then select a center to flag an accident.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex h-[calc(100%-6.5rem)] flex-col gap-4 overflow-hidden">
-            <div className="space-y-3">
-              <Input
-                value={onboardingPoint}
-                onChange={(event) => setOnboardingPoint(event.target.value)}
-                placeholder="Onboarding point"
-              />
-              <Input
-                value={dropoffPoint}
-                onChange={(event) => setDropoffPoint(event.target.value)}
-                placeholder="Drop-off point"
-              />
-              <Button className="w-full" onClick={startRouting} disabled={isLoadingRoute}>
-                {isLoadingRoute ? (
+          <Card className="h-[86vh] min-h-[560px]">
+            <CardHeader>
+              <CardTitle>Route Controls</CardTitle>
+              <CardDescription>
+                Enter onboarding and drop-off. Then click on map and confirm accident location.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex h-[calc(100%-6.5rem)] flex-col gap-4 overflow-hidden">
+              <div className="space-y-3">
+                <Input
+                  value={onboardingPoint}
+                  onChange={(event) => setOnboardingPoint(event.target.value)}
+                  placeholder="Onboarding point"
+                />
+                <Input
+                  value={dropoffPoint}
+                  onChange={(event) => setDropoffPoint(event.target.value)}
+                  placeholder="Drop-off point"
+                />
+                <Button className="w-full" onClick={startRouting} disabled={isLoadingRoute}>
+                  {isLoadingRoute ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Routing...
+                    </>
+                  ) : (
+                    "Start"
+                  )}
+                </Button>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <p className="text-sm font-medium">Accident point</p>
+                {confirmedAccidentPoint ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Routing...
+                    <p className="text-xs text-muted-foreground">{formatLatLng(confirmedAccidentPoint)}</p>
+                    <Button variant="outline" size="sm" onClick={() => void clearAccidentPoint()}>
+                      Clear accident point
+                    </Button>
                   </>
                 ) : (
-                  "Start"
+                  <p className="text-xs text-muted-foreground">
+                    No accident point selected. Click on map to choose one.
+                  </p>
                 )}
-              </Button>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-3 overflow-y-auto pr-1">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Important centers on route</p>
-                <Badge variant="outline">{centers.length}</Badge>
               </div>
 
-              {centers.length === 0 ? (
-                <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                  Start routing to list centers and checkpoints here.
+              {confirmedAccidentPoint ? (
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  Confirmed accident location is active. Showing detour route.
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {centers.map((center) => {
-                    const selected = selectedAccidentCenterId === center.id;
-                    return (
-                      <button
-                        key={center.id}
-                        type="button"
-                        onClick={() => void handleCenterToggle(center)}
-                        className="flex w-full items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-accent/50"
-                      >
-                        <span
-                          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                            selected
-                              ? "border-destructive bg-destructive text-destructive-foreground"
-                              : "border-border bg-background"
-                          }`}
-                          aria-hidden="true"
-                        >
-                          {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="line-clamp-2 block text-sm font-medium">
-                            {center.title}
-                          </span>
-                          <span className="text-muted-foreground text-xs">{center.detail}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
+              ) : null}
+
+              {error ? (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                  {error}
                 </div>
-              )}
-            </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      </main>
 
-            {selectedAccidentCenterId ? (
-              <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                Selected center is treated as an accident location. Showing detour route.
-              </div>
-            ) : null}
-
-            {error ? (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-                {error}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-    </main>
+      <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+        <DialogContent className="z-[1001]">
+          <DialogHeader>
+            <DialogTitle>Confirm Accident Point</DialogTitle>
+            <DialogDescription>
+              {pendingAccidentPoint
+                ? `Use ${formatLatLng(pendingAccidentPoint)} as accident location?`
+                : "Choose a point on map."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsConfirmDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void confirmAccidentPoint()} disabled={!pendingAccidentPoint}>
+              Confirm and reroute
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

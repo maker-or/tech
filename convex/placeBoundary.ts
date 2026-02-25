@@ -168,14 +168,14 @@ function textMatchLocation(values: string[], placeName: string, displayName: str
   return displayTokens.some((token) => includesIgnoreCase(values, token));
 }
 
-export const findCrashesByPlaceBoundary = action({
+export const findCrashesByPlaceBoundary: any = action({
   args: {
     placeName: v.string(),
     startTime: v.optional(v.string()),
     endTime: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<any> => {
     const placeUrl = new URL("https://nominatim.openstreetmap.org/search");
     placeUrl.searchParams.set("q", args.placeName);
     placeUrl.searchParams.set("format", "jsonv2");
@@ -206,7 +206,11 @@ export const findCrashesByPlaceBoundary = action({
     }
 
     const scanLimit = Math.max(1, Math.min(args.limit ?? 500, 5000));
-    const rows = await ctx.runQuery((api as any).crash.listCrashesForGeoFilter, {
+    const rows: Array<{
+      timeStamp: string;
+      vehicleId: string[];
+      location: string[];
+    }> = await ctx.runQuery((api as any).crash.listCrashesForGeoFilter, {
       startTime: args.startTime,
       endTime: args.endTime,
       limit: scanLimit,
